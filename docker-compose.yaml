@@ -1,0 +1,212 @@
+version: '3.6'
+
+services:
+  traefik:
+    hostname: traefik
+    image: traefik:latest
+    container_name: traefik
+    restart: always
+    domainname: ${DOMAINNAME}
+    networks:
+      - default
+      - traefik_proxy
+    ports:
+      - "443:443"
+      - "8080:8080" # The Web UI (enabled by --api)
+    environment:
+      - DUCKDNS_TOKEN=${DUCKDNS_TOKEN}
+    volumes:
+      - ./data/traefik:/etc/traefik
+      - ./data/shared:/shared
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.backend=traefik"
+      - "traefik.frontend.rule=Host:${DOMAINNAME}; PathPrefixStrip: /traefik"
+      - "traefik.port=8080"
+      - "traefik.docker.network=traefik_proxy"
+      - "traefik.frontend.headers.SSLRedirect=true"
+      - "traefik.frontend.headers.STSSeconds=315360000"
+      - "traefik.frontend.headers.browserXSSFilter=true"
+      - "traefik.frontend.headers.contentTypeNosniff=true"
+      - "traefik.frontend.headers.forceSTSHeader=true"
+      - "traefik.frontend.headers.STSIncludeSubdomains=true"
+      - "traefik.frontend.headers.STSPreload=true"
+      - "traefik.frontend.headers.frameDeny=true"
+
+  portainer:
+    image: portainer/portainer
+    container_name: portainer
+    restart: always
+    command: -H unix:///var/run/docker.sock
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./data/portainer/data:/data
+      - ./data/shared:/shared
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - TZ=${TZ}
+    networks:
+      - traefik_proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.backend=portainer"
+      - "traefik.frontend.rule=Host:${DOMAINNAME}; PathPrefixStrip: /portainer"
+      - "traefik.port=9000"
+      - "traefik.docker.network=traefik_proxy"
+      - "traefik.frontend.headers.SSLRedirect=true"
+      - "traefik.frontend.headers.STSSeconds=315360000"
+      - "traefik.frontend.headers.browserXSSFilter=true"
+      - "traefik.frontend.headers.contentTypeNosniff=true"
+      - "traefik.frontend.headers.forceSTSHeader=true"
+      - "traefik.frontend.headers.STSIncludeSubdomains=true"
+      - "traefik.frontend.headers.STSPreload=true"
+      - "traefik.frontend.headers.frameDeny=true"
+
+  home-assistant:
+    image: homeassistant/home-assistant:0.83.3
+    container_name: "hass"
+    restart: always
+    depends_on:
+      - database
+      - influxdb
+      - mqtt
+    ports:
+      - 8123:8123
+    volumes:
+      - ./data/hass:/config
+    devices:
+      - /dev/zwave:/dev/ttyACM0
+    networks:
+      - traefik_proxy
+      - default
+    privileged: true
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - /etc/localtime:/etc/localtime:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.backend=homeassistant"
+      - "traefik.frontend.rule=Host:${DOMAINNAME}; PathPrefixStrip: /"
+      - "traefik.port=8123"
+      - "traefik.docker.network=traefik_proxy"
+      - "traefik.frontend.headers.SSLRedirect=true"
+      - "traefik.frontend.headers.STSSeconds=315360000"
+      - "traefik.frontend.headers.browserXSSFilter=true"
+      - "traefik.frontend.headers.contentTypeNosniff=true"
+      - "traefik.frontend.headers.forceSTSHeader=true"
+      - "traefik.frontend.headers.STSIncludeSubdomains=true"
+      - "traefik.frontend.headers.STSPreload=true"
+      - "traefik.frontend.headers.frameDeny=true"
+
+  # plex:
+  #   container_name: plex
+  #   image: plexinc/pms-docker:public
+  #   restart: always
+  #   ports:
+  #     - "32400:32400/tcp"
+  #     - "3005:3005/tcp"
+  #     - "8324:8324/tcp"
+  #     - "32469:32469/tcp"
+  #     - "1900:1900/udp"
+  #     - "32410:32410/udp"
+  #     - "32412:32412/udp"
+  #     - "32413:32413/udp"
+  #     - "32414:32414/udp"
+  #   environment:
+  #     - TZ=${TZ}
+  #     - HOSTNAME="Plex"
+  #     - PLEX_CLAIM="${PLEX_CLAIM}"
+  #     - PLEX_UID=${PUID}
+  #     - PLEX_GID=${PGID}
+  #     - ADVERTISE_IP="${PLEX_IP}"
+  #   volumes:
+  #     - ./data/plex:/config
+  #     - ./data/plex/transcode/:/transcode
+  #     - ${USERDIR}/plex:/data
+  #     - ${USERDIR}/plex/CABARET:/data/cabaret
+  #     - ${USERDIR}/plex/KIDS MOVIES:/data/kids-movies
+  #     - ${USERDIR}/plex/KIDS SERIES:/data/kids-series
+  #     - ${USERDIR}/plex/MOVIES:/data/movies
+  #     - ${USERDIR}/plex/NATURE AND SCIENCE:/data/nature-and-science
+
+  mqtt:
+    image: eclipse-mosquitto:1.5
+    container_name: MQTT
+    restart: always
+    ports:
+      - 1883:1883
+    networks:
+      - default
+    volumes:
+      - ./data/mqtt/data:/mosquitto/data
+      - ./data/mqtt/config:/mosquitto/config
+      - ./data/mqtt/log:/mosquitto/log
+    environment:
+      - TZ=${TZ}
+      - PGID=${PGID}
+      - PUID=${PUID}
+
+  grafana:
+    image: grafana/grafana:5.3.2
+    container_name: grafana
+    restart: always
+    user: "1000"
+    depends_on:
+      - influxdb
+    ports:
+      - 3000:3000
+    networks:
+      - default
+    volumes:
+      - ./data/grafana:/var/lib/grafana
+    environment:
+      - TZ=${TZ}
+      - PGID=${PGID}
+      - PUID=${PUID}
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+
+  influxdb:
+    image: influxdb:1.7
+    container_name: influxdb
+    restart: always
+    ports:
+      - 8083:8083
+      - 8086:8086
+    networks:
+      - default
+    volumes:
+      - ./data/influxdb:/var/lib/influxdb
+    environment:
+      - TZ=${TZ}
+      - INFLUXDB_DB=${INFLUX_DB}
+      - INFLUXDB_ADMIN_ENABLED=true
+
+  database:
+    container_name: database
+    restart: always
+    image: postgres:9.6
+    ports:
+      - "5432:5432"
+    networks:
+      - default
+    volumes:
+      - ./data/postgresql:/var/lib/postgresql/data
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - POSTGRES_USER=${HASS_DB_username}
+      - POSTGRES_PASSWORD=${HASS_DB_PASSWORD}
+      - POSTGRES_DB=${HASS_DB_name}
+
+volumes:
+  portainer_data:
+
+networks:
+  traefik_proxy:
+    external:
+      name: traefik_proxy
+  default:
+    driver: bridge
