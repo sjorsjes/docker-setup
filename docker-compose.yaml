@@ -197,9 +197,9 @@ services:
       - ./data/postgresql:/var/lib/postgresql/data
       - /etc/localtime:/etc/localtime:ro
     environment:
-      - POSTGRES_USER=${HASS_DB_username}
+      - POSTGRES_USER=${HASS_DB_USERNAME}
       - POSTGRES_PASSWORD=${HASS_DB_PASSWORD}
-      - POSTGRES_DB=${HASS_DB_name}
+      - POSTGRES_DB=${HASS_DB_NAME}
 
 volumes:
   portainer_data:
