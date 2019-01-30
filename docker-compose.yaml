@@ -65,7 +65,7 @@ services:
       - "traefik.frontend.headers.frameDeny=true"
 
   home-assistant:
-    image: homeassistant/home-assistant:0.83.3
+    image: homeassistant/home-assistant:0.86.3
     container_name: "hass"
     restart: always
     depends_on:
